@@ -12,7 +12,7 @@ import org.eclipse.jgit.storage.file.FileRepository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
 /**
- * @goal gitVersionBranch
+ * @goal gitVersion
  * 
  * @author <a href="mailto:sejal@inigma.org">Sejal Patel</a>
  */
@@ -38,8 +38,22 @@ public class GitVersionBranchMojo extends AbstractMojo {
      */
     private List<MavenProject> reactorProjects;
 
+    /**
+     * Define the desired pattern to use for snapshots of branched code. Valid substitution variables are
+     * <ul>
+     * <li>project.version - The original version number without the -SNAPSHOT component.</li>
+     * <li>scmVersion.date - The current date in yyyy.MM.dd.hh.mm.ss format.</li>
+     * <li>scmVersion.branch - The name of the current branch.</li>
+     * </ul>
+     * 
+     * @parameter expression="${versionPattern}" default-value="${scmVersion.number}.${scmVersion.branch}-SNAPSHOT"
+     * @readonly
+     */
+    private String versionPattern;
+
     public void execute() throws MojoExecutionException, MojoFailureException {
-        VersionInformation version = new VersionInformation();
+        getLog().info("Executing GitVersionBranchMojo with pattern " + versionPattern);
+        VersionInformation version = new VersionInformation(versionPattern);
         String versionString = artifact.getVersion();
         version.setSnapshot(versionString.endsWith("-SNAPSHOT"));
         if (version.isSnapshot()) {
@@ -67,17 +81,10 @@ public class GitVersionBranchMojo extends AbstractMojo {
             }
         }
 
-        setProperties(project, version);
+        String finalVersion = version.getFinalVersion();
+        project.getProperties().put("scmVersion", finalVersion); // version-branch-SNAPSHOT
         for (MavenProject subproj : reactorProjects) {
-            setProperties(subproj, version);
+            subproj.getProperties().put("scmVersion", finalVersion);
         }
-    }
-
-    private void setProperties(MavenProject project, VersionInformation version) {
-        String branchStyle = version.getBranchStyle();
-        project.getProperties().put("scmVersion", branchStyle); // version-branch-SNAPSHOT
-        project.getProperties().put("scmVersion.branch", branchStyle); // branch-SNAPSHOT
-        project.getProperties().put("scmVersion.date", version.getDateStyle()); // date-SNAPSHOT
-        project.getProperties().put("scmVersion.branchDate", version.getBranchDateStyle());
     }
 }

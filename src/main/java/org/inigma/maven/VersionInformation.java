@@ -8,6 +8,11 @@ public class VersionInformation {
     private String version;
     private boolean snapshot;
     private Date timestamp = new Date();
+    private String pattern;
+
+    public VersionInformation(String pattern) {
+        this.pattern = pattern;
+    }
 
     public void setTimestamp(Date timestamp) {
         this.timestamp = timestamp;
@@ -29,29 +34,15 @@ public class VersionInformation {
         this.version = version;
     }
 
-    public String getBranchDateStyle() {
-        if (snapshot) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd.hh.mm.ss");
-            return branchName + "." + sdf.format(timestamp);
+    public String getFinalVersion() {
+        if (!snapshot) {
+            return version;
         }
-        return version;
-    }
 
-    public String getDateStyle() {
-        if (snapshot) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd.hh.mm.ss");
-            return sdf.format(timestamp);
-        }
-        return version;
-    }
-
-    public String getBranchStyle() {
-        if (snapshot) {
-            if (branchName == null) {
-                return version + "-SNAPSHOT";
-            }
-            return version + "." + branchName + "-SNAPSHOT";
-        }
-        return version;
+        String snapshotVersion = pattern.replaceAll("\\$\\{scmVersion\\.number\\}", version);
+        snapshotVersion = snapshotVersion.replaceAll("\\$\\{scmVersion\\.branch\\}", branchName);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd.hh.mm.ss");
+        snapshotVersion = snapshotVersion.replaceAll("\\$\\{scmVersion\\.date\\}", sdf.format(timestamp));
+        return snapshotVersion;
     }
 }
