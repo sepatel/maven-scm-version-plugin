@@ -41,7 +41,7 @@ public class GitVersionBranchMojo extends AbstractMojo {
     /**
      * Define the desired pattern to use for snapshots of branched code. Valid substitution variables are
      * <ul>
-     * <li>project.version - The original version number without the -SNAPSHOT component.</li>
+     * <li>scmVersion.number - The original version number without the -SNAPSHOT component.</li>
      * <li>scmVersion.date - The current date in yyyy.MM.dd.hh.mm.ss format.</li>
      * <li>scmVersion.branch - The name of the current branch.</li>
      * </ul>

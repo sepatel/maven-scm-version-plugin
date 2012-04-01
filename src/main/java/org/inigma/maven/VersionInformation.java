@@ -37,6 +37,8 @@ public class VersionInformation {
     public String getFinalVersion() {
         if (!snapshot) {
             return version;
+        } else if (branchName == null) {
+            return version + "-SNAPSHOT";
         }
 
         String snapshotVersion = pattern.replaceAll("\\$\\{scmVersion\\.number\\}", version);
