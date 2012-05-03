@@ -8,6 +8,7 @@ import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
+import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.storage.file.FileRepository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
@@ -67,16 +68,19 @@ public class GitVersionBranchMojo extends AbstractMojo {
             if (repositoryBuilder == null) {
                 throw new MojoExecutionException("Git Repository could not be found.");
             }
-            String branch = null;
+            String branch = "master";
             try {
                 FileRepository repository = repositoryBuilder.build();
-                branch = repository.getBranch();
-                getLog().info("Branch name is " + branch);
+                String name = repository.getBranch();
+                if (repository.getRef(name) != null) {
+                    branch = name;
+                }
             } catch (IOException e) {
                 throw new MojoExecutionException("Unable to understand the git repository", e);
             }
 
             if (!"master".equals(branch)) {
+                getLog().info("Altering version branch to " + branch);
                 version.setBranchName(branch);
             }
         }
