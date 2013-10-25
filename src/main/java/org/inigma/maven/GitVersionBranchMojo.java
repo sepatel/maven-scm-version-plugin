@@ -7,38 +7,34 @@ import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.descriptor.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.eclipse.jgit.lib.Ref;
-import org.eclipse.jgit.storage.file.FileRepository;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
 /**
- * @goal gitVersion
- * 
  * @author <a href="mailto:sejal@inigma.org">Sejal Patel</a>
+ * @goal gitVersion
  */
 public class GitVersionBranchMojo extends AbstractMojo {
     /**
      * @parameter default-value="${project.artifact}"
      */
     private Artifact artifact;
-
     /**
      * The maven project.
-     * 
+     *
      * @parameter expression="${project}"
      * @readonly
      */
     private MavenProject project;
-
     /**
      * Contains the full list of projects in the reactor.
-     * 
+     *
      * @parameter expression="${reactorProjects}"
      * @readonly
      */
     private List<MavenProject> reactorProjects;
-
     /**
      * Define the desired pattern to use for snapshots of branched code. Valid substitution variables are
      * <ul>
@@ -46,8 +42,8 @@ public class GitVersionBranchMojo extends AbstractMojo {
      * <li>scmVersion.date - The current date in yyyy.MM.dd.hh.mm.ss format.</li>
      * <li>scmVersion.branch - The name of the current branch.</li>
      * </ul>
-     * 
-     * @parameter expression="${versionPattern}" default-value="${scmVersion.number}.${scmVersion.branch}-SNAPSHOT"
+     *
+     * @parameter expression="${versionPattern}" default-value="${scmVersion.branch}-SNAPSHOT"
      * @readonly
      */
     private String versionPattern;
@@ -70,7 +66,7 @@ public class GitVersionBranchMojo extends AbstractMojo {
             }
             String branch = "master";
             try {
-                FileRepository repository = repositoryBuilder.build();
+                Repository repository = repositoryBuilder.build();
                 String name = repository.getBranch();
                 if (repository.getRef(name) != null) {
                     branch = name;
@@ -79,16 +75,16 @@ public class GitVersionBranchMojo extends AbstractMojo {
                 throw new MojoExecutionException("Unable to understand the git repository", e);
             }
 
-            if (!"master".equals(branch)) {
-                getLog().info("Altering version branch to " + branch);
-                version.setBranchName(branch);
-            }
+            getLog().info("Altering version branch to " + branch);
+            version.setBranchName(branch);
         }
 
         String finalVersion = version.getFinalVersion();
-        project.getProperties().put("scmVersion", finalVersion); // version-branch-SNAPSHOT
+        project.getProperties().put("scmVersion", finalVersion); // branch-SNAPSHOT
+        project.setVersion(finalVersion);
         for (MavenProject subproj : reactorProjects) {
             subproj.getProperties().put("scmVersion", finalVersion);
+            subproj.setVersion(finalVersion);
         }
     }
 }
