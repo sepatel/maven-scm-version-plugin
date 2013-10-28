@@ -7,7 +7,6 @@ import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugin.descriptor.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
@@ -15,6 +14,7 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 /**
  * @author <a href="mailto:sejal@inigma.org">Sejal Patel</a>
  * @goal gitVersion
+ * @phase validate
  */
 public class GitVersionBranchMojo extends AbstractMojo {
     /**
@@ -82,9 +82,11 @@ public class GitVersionBranchMojo extends AbstractMojo {
         String finalVersion = version.getFinalVersion();
         project.getProperties().put("scmVersion", finalVersion); // branch-SNAPSHOT
         project.setVersion(finalVersion);
+        project.getArtifact().setVersion(finalVersion);
         for (MavenProject subproj : reactorProjects) {
             subproj.getProperties().put("scmVersion", finalVersion);
             subproj.setVersion(finalVersion);
+            subproj.getArtifact().setVersion(finalVersion);
         }
     }
 }
