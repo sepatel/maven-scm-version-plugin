@@ -9,7 +9,7 @@
 
   <groupId>org.inigma.maven</groupId>
   <artifactId>maven-scm-version-plugin</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1-SNAPSHOT</version>
   <name>SCM Version</name>
   <description>A plugin for auto-altering version number of SNAPSHOT to include branch name if branched code.
   </description>
