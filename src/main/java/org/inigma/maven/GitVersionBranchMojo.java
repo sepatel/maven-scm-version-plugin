@@ -83,10 +83,13 @@ public class GitVersionBranchMojo extends AbstractMojo {
         project.getProperties().put("scmVersion", finalVersion); // branch-SNAPSHOT
         project.setVersion(finalVersion);
         project.getArtifact().setVersion(finalVersion);
+        project.getArtifact().setBaseVersion(finalVersion);
+
         for (MavenProject subproj : reactorProjects) {
             subproj.getProperties().put("scmVersion", finalVersion);
             subproj.setVersion(finalVersion);
             subproj.getArtifact().setVersion(finalVersion);
+            subproj.getArtifact().setBaseVersion(finalVersion);
         }
     }
 }
