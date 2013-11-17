@@ -9,7 +9,6 @@ import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.factory.ArtifactFactory;
 import org.apache.maven.artifact.installer.ArtifactInstallationException;
 import org.apache.maven.artifact.installer.ArtifactInstaller;
-import org.apache.maven.artifact.metadata.ArtifactMetadata;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
@@ -61,8 +60,6 @@ public class VersionPomInstallMojo extends AbstractInstallMojo {
         super.installer = myInstaller;
         // TODO: push into transformation
         boolean isPomArtifact = "pom".equals(packaging);
-
-        ArtifactMetadata metadata = null;
 
         if (updateReleaseInfo) {
             artifact.setRelease(true);
