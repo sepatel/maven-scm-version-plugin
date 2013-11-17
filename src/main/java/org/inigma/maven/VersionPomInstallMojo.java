@@ -2,23 +2,16 @@ package org.inigma.maven;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
+import java.util.Collection;
 
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.artifact.factory.ArtifactFactory;
 import org.apache.maven.artifact.installer.ArtifactInstallationException;
 import org.apache.maven.artifact.installer.ArtifactInstaller;
-import org.apache.maven.model.Model;
-import org.apache.maven.model.Parent;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
+import org.apache.maven.artifact.metadata.ArtifactMetadata;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.install.AbstractInstallMojo;
-import org.codehaus.plexus.util.IOUtil;
-import org.codehaus.plexus.util.ReaderFactory;
-import org.codehaus.plexus.util.WriterFactory;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.codehaus.plexus.digest.Digester;
+import org.codehaus.plexus.digest.DigesterException;
+import org.codehaus.plexus.util.FileUtils;
 
 /**
  * Installs the project's main artifact in the local repository.
@@ -28,37 +21,32 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
  * @phase install
  * @since 11/16/13 12:32 PM
  */
-public class VersionPomInstallMojo extends AbstractInstallMojo {
-    /**
-     * @parameter default-value="${project.packaging}"
-     * @required
-     * @readonly
-     */
-    protected String packaging;
+public class VersionPomInstallMojo extends AbstractVersionPomMojo {
     /**
      * @component
      */
-    protected ArtifactFactory artifactFactory;
+    protected ArtifactInstaller installer;
     /**
-     * @component
+     * Flag whether to create checksums (MD5, SHA-1) or not.
+     *
+     * @parameter expression="${createChecksum}" default-value="false"
+     * @since 2.2
      */
-    protected ArtifactInstaller myInstaller;
+    protected boolean createChecksum;
     /**
-     * @parameter default-value="${project.file}"
-     * @required
-     * @readonly
+     * Digester for MD5.
+     *
+     * @component role-hint="md5"
      */
-    private File pomFile;
+    protected Digester md5Digester;
     /**
-     * @parameter default-value="${project.artifact}"
-     * @required
-     * @readonly
+     * Digester for SHA-1.
+     *
+     * @component role-hint="sha1"
      */
-    private Artifact artifact;
+    protected Digester sha1Digester;
 
     public void execute() throws MojoExecutionException {
-        super.installer = myInstaller;
-        // TODO: push into transformation
         boolean isPomArtifact = "pom".equals(packaging);
 
         if (updateReleaseInfo) {
@@ -87,37 +75,59 @@ public class VersionPomInstallMojo extends AbstractInstallMojo {
         }
     }
 
-    private File getPomFile() {
-        Reader reader = null;
-        Writer writer = null;
-        Model model;
-        try {
-            reader = ReaderFactory.newXmlReader(pomFile);
-            model = new MavenXpp3Reader().read(reader);
+    protected File getLocalRepoFile(Artifact artifact) {
+        String path = localRepository.pathOf(artifact);
+        return new File(localRepository.getBasedir(), path);
+    }
 
-            File tmpFile = File.createTempFile("mvninstall", ".pom");
-            writer = WriterFactory.newXmlWriter(tmpFile);
-            Parent parent = model.getParent();
-            if (parent != null && parent.getVersion().endsWith("-SNAPSHOT")) {
-                parent.setVersion(artifact.getVersion());
-            }
-            if (model.getVersion() != null && model.getVersion().endsWith("-SNAPSHOT")) {
-                model.setVersion(artifact.getVersion());
-            }
-            new MavenXpp3Writer().write(writer, model);
-            return tmpFile;
-        } catch (IOException e) {
-            getLog().error("Unable to read pom file " + pomFile, e);
-        } catch (XmlPullParserException e) {
-            getLog().error("Unable to understand pom file " + pomFile, e);
-        } finally {
-            if (reader != null) {
-                IOUtil.close(reader);
-            }
-            if (writer != null) {
-                IOUtil.close(writer);
+    protected File getLocalRepoFile(ArtifactMetadata metadata) {
+        String path = localRepository.pathOfLocalRepositoryMetadata(metadata, localRepository);
+        return new File(localRepository.getBasedir(), path);
+    }
+
+    protected void installChecksums(Artifact artifact) throws MojoExecutionException {
+        if (!createChecksum) {
+            return;
+        }
+
+        File artifactFile = getLocalRepoFile(artifact);
+        installChecksums(artifactFile);
+
+        Collection metadatas = artifact.getMetadataList();
+        if (metadatas != null) {
+            for (ArtifactMetadata metadata : artifact.getMetadataList()) {
+                File metadataFile = getLocalRepoFile(metadata);
+                installChecksums(metadataFile);
             }
         }
-        return pomFile;
+    }
+
+    private void installChecksum(File originalFile, File installedFile, Digester digester, String ext)
+            throws MojoExecutionException {
+        String checksum;
+        getLog().debug("Calculating " + digester.getAlgorithm() + " checksum for " + originalFile);
+        try {
+            checksum = digester.calc(originalFile);
+        } catch (DigesterException e) {
+            throw new MojoExecutionException("Failed to calculate " + digester.getAlgorithm() + " checksum for "
+                    + originalFile, e);
+        }
+
+        File checksumFile = new File(installedFile.getAbsolutePath() + ext);
+        getLog().debug("Installing checksum to " + checksumFile);
+        try {
+            checksumFile.getParentFile().mkdirs();
+            FileUtils.fileWrite(checksumFile.getAbsolutePath(), "UTF-8", checksum);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to install checksum to " + checksumFile, e);
+        }
+    }
+
+    private void installChecksums(File installedFile) throws MojoExecutionException {
+        boolean signatureFile = installedFile.getName().endsWith(".asc");
+        if (installedFile.isFile() && !signatureFile) {
+            installChecksum(installedFile, installedFile, md5Digester, ".md5");
+            installChecksum(installedFile, installedFile, sha1Digester, ".sha1");
+        }
     }
 }

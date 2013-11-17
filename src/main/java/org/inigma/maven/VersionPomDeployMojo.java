@@ -1,9 +1,6 @@
 package org.inigma.maven;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -11,24 +8,14 @@ import java.util.regex.Pattern;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.deployer.ArtifactDeployer;
 import org.apache.maven.artifact.deployer.ArtifactDeploymentException;
-import org.apache.maven.artifact.factory.ArtifactFactory;
 import org.apache.maven.artifact.metadata.ArtifactMetadata;
 import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.artifact.repository.ArtifactRepositoryFactory;
 import org.apache.maven.artifact.repository.layout.ArtifactRepositoryLayout;
-import org.apache.maven.model.Model;
-import org.apache.maven.model.Parent;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugin.deploy.AbstractDeployMojo;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.artifact.ProjectArtifactMetadata;
-import org.codehaus.plexus.util.IOUtil;
-import org.codehaus.plexus.util.ReaderFactory;
-import org.codehaus.plexus.util.WriterFactory;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
 /**
  * Deploys an artifact to remote repository.
@@ -39,38 +26,14 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
  * @threadSafe
  * @since 11/17/13 12:31 AM
  */
-public class VersionPomDeployMojo extends AbstractDeployMojo {
+public class VersionPomDeployMojo extends AbstractVersionPomMojo {
     private static final Pattern ALT_REPO_SYNTAX_PATTERN = Pattern.compile("(.+)::(.+)::(.+)");
-    /**
-     * Component used to create an artifact.
-     *
-     * @component
-     */
-    private ArtifactFactory artifactFactory;
     /**
      * @parameter default-value="${project}"
      * @required
      * @readonly
      */
     private MavenProject project;
-    /**
-     * @parameter default-value="${project.artifact}"
-     * @required
-     * @readonly
-     */
-    private Artifact artifact;
-    /**
-     * @parameter default-value="${project.packaging}"
-     * @required
-     * @readonly
-     */
-    private String packaging;
-    /**
-     * @parameter default-value="${project.file}"
-     * @required
-     * @readonly
-     */
-    private File pomFile;
     /**
      * Specifies an alternative repository to which the project artifacts should be deployed ( other
      * than those specified in &lt;distributionManagement&gt; ).
@@ -110,9 +73,16 @@ public class VersionPomDeployMojo extends AbstractDeployMojo {
      * @component
      */
     private ArtifactDeployer deployer;
+    /**
+     * Parameter used to control how many times a failed deployment will be retried before giving up and failing.
+     * If a value outside the range 1-10 is specified it will be pulled to the nearest value within the range 1-10.
+     *
+     * @parameter expression="${retryFailedDeploymentCount}" default-value="1"
+     * @since 2.7
+     */
+    private int retryFailedDeploymentCount;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
-        setDeployer(deployer);
         if (skip) {
             getLog().info("Skipping artifact deployment");
             return;
@@ -144,7 +114,7 @@ public class VersionPomDeployMojo extends AbstractDeployMojo {
         try {
             File pomFile = getPomFile(); // need the translated version of the pom file
             if (isPomArtifact) {
-                deploy(pomFile, artifact, repo, getLocalRepository());
+                deploy(pomFile, artifact, repo, localRepository);
             } else {
                 Artifact pomArtifact = artifactFactory.createProjectArtifact(artifact.getGroupId(),
                         artifact.getArtifactId(), artifact.getBaseVersion());
@@ -153,7 +123,7 @@ public class VersionPomDeployMojo extends AbstractDeployMojo {
                     pomArtifact.setRelease(true);
                 }
 
-                deploy(pomFile, pomArtifact, repo, getLocalRepository());
+                deploy(pomFile, pomArtifact, repo, localRepository);
             }
             pomFile.delete();
         } catch (ArtifactDeploymentException e) {
@@ -161,15 +131,40 @@ public class VersionPomDeployMojo extends AbstractDeployMojo {
         }
     }
 
-    private void failIfOffline()
-            throws MojoFailureException {
+    private void deploy(File source, Artifact artifact, ArtifactRepository deploymentRepository,
+            ArtifactRepository localRepository) throws ArtifactDeploymentException {
+        int retryFailedDeploymentCount = Math.max(1, Math.min(10, this.retryFailedDeploymentCount));
+        ArtifactDeploymentException exception = null;
+        for (int count = 0; count < retryFailedDeploymentCount; count++) {
+            try {
+                if (count > 0) {
+                    getLog().info("Retrying deployment attempt " + (count + 1) + " of " + retryFailedDeploymentCount);
+                }
+                deployer.deploy(source, artifact, deploymentRepository, localRepository);
+                exception = null;
+                break;
+            } catch (ArtifactDeploymentException e) {
+                if (count + 1 < retryFailedDeploymentCount) {
+                    getLog().warn("Encountered issue during deployment: " + e.getLocalizedMessage());
+                    getLog().debug(e);
+                }
+                if (exception == null) {
+                    exception = e;
+                }
+            }
+        }
+        if (exception != null) {
+            throw exception;
+        }
+    }
+
+    private void failIfOffline() throws MojoFailureException {
         if (offline) {
             throw new MojoFailureException("Cannot deploy artifacts when Maven is in offline mode");
         }
     }
 
-    private ArtifactRepository getDeploymentRepository()
-            throws MojoExecutionException, MojoFailureException {
+    private ArtifactRepository getDeploymentRepository() throws MojoExecutionException, MojoFailureException {
         ArtifactRepository repo = null;
 
         if (altDeploymentRepository != null) {
@@ -214,39 +209,4 @@ public class VersionPomDeployMojo extends AbstractDeployMojo {
 
         return layout;
     }
-
-    private File getPomFile() {
-        Reader reader = null;
-        Writer writer = null;
-        Model model;
-        try {
-            reader = ReaderFactory.newXmlReader(pomFile);
-            model = new MavenXpp3Reader().read(reader);
-
-            File tmpFile = File.createTempFile("mvninstall", ".pom");
-            writer = WriterFactory.newXmlWriter(tmpFile);
-            Parent parent = model.getParent();
-            if (parent != null && parent.getVersion().endsWith("-SNAPSHOT")) {
-                parent.setVersion(artifact.getVersion());
-            }
-            if (model.getVersion() != null && model.getVersion().endsWith("-SNAPSHOT")) {
-                model.setVersion(artifact.getVersion());
-            }
-            new MavenXpp3Writer().write(writer, model);
-            return tmpFile;
-        } catch (IOException e) {
-            getLog().error("Unable to read pom file " + pomFile, e);
-        } catch (XmlPullParserException e) {
-            getLog().error("Unable to understand pom file " + pomFile, e);
-        } finally {
-            if (reader != null) {
-                IOUtil.close(reader);
-            }
-            if (writer != null) {
-                IOUtil.close(writer);
-            }
-        }
-        return pomFile;
-    }
-
 }
