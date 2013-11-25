@@ -49,6 +49,7 @@ public class GitVersionBranchMojo extends AbstractMojo {
     private String versionPattern;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
+        boolean abortVersioning = false;
         getLog().info("Executing GitVersionBranchMojo with pattern " + versionPattern);
         VersionInformation version = new VersionInformation(versionPattern);
         String versionString = artifact.getVersion();
@@ -60,9 +61,10 @@ public class GitVersionBranchMojo extends AbstractMojo {
         }
 
         if (version.isSnapshot()) {
-            FileRepositoryBuilder repositoryBuilder = new FileRepositoryBuilder().findGitDir();
+            FileRepositoryBuilder repositoryBuilder = new FileRepositoryBuilder().findGitDir(project.getBasedir());
             if (repositoryBuilder == null) {
-                throw new MojoExecutionException("Git Repository could not be found.");
+                getLog().warn("Git Repository could not be found. Not executing versioning ...");
+                abortVersioning = true;
             }
             String branch = "master";
             try {
@@ -71,15 +73,22 @@ public class GitVersionBranchMojo extends AbstractMojo {
                 if (repository.getRef(name) != null) {
                     branch = name;
                 }
+            } catch (IllegalArgumentException e) {
+                getLog().warn("Git Repository could not be found. Not executing versioning");
+                abortVersioning = true;
             } catch (IOException e) {
-                throw new MojoExecutionException("Unable to understand the git repository", e);
+                getLog().warn("Unable to understand the git repository. Not executing versioning ...", e);
+                abortVersioning = true;
             }
 
-            getLog().info("Altering version branch to " + branch);
             version.setBranchName(branch);
         }
 
         String finalVersion = version.getFinalVersion();
+        if (abortVersioning) {
+            finalVersion = artifact.getVersion();
+        }
+        getLog().info("Altering versions to " + finalVersion);
         project.getProperties().put("scmVersion", finalVersion); // branch-SNAPSHOT
         project.setVersion(finalVersion);
         project.getArtifact().setVersion(finalVersion);
