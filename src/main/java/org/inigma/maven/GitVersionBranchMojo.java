@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.maven.artifact.Artifact;
+import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -86,7 +87,7 @@ public class GitVersionBranchMojo extends AbstractMojo {
 
         String finalVersion = version.getFinalVersion();
         if (abortVersioning) {
-            finalVersion = artifact.getVersion();
+            return;
         }
         getLog().info("Altering versions to " + finalVersion);
         updateProjectInformation(project, finalVersion);
@@ -101,12 +102,11 @@ public class GitVersionBranchMojo extends AbstractMojo {
         prj.setVersion(finalVersion);
         prj.getArtifact().setVersion(finalVersion);
         prj.getArtifact().setBaseVersion(finalVersion);
-        /*
+
         for (Dependency dependency : prj.getDependencies()) {
             if (artifact.getGroupId().equals(dependency.getGroupId())) {
                 dependency.setVersion(finalVersion);
             }
         }
-        */
     }
 }
