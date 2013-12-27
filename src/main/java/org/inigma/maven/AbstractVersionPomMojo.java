@@ -59,10 +59,10 @@ public abstract class AbstractVersionPomMojo extends AbstractMojo {
     protected ArtifactRepository localRepository;
 
     protected File getPomFile() {
-        return getPomFile(pomFile);
+        return getPomFile(pomFile, artifact.getVersion());
     }
 
-    protected File getPomFile(File sourceFile) {
+    protected File getPomFile(File sourceFile, String version) {
         Reader reader = null;
         Writer writer = null;
         Model model;
@@ -74,10 +74,10 @@ public abstract class AbstractVersionPomMojo extends AbstractMojo {
             writer = WriterFactory.newXmlWriter(tmpFile);
             Parent parent = model.getParent();
             if (parent != null && parent.getVersion().endsWith("-SNAPSHOT")) {
-                parent.setVersion(artifact.getVersion());
+                parent.setVersion(version);
             }
             if (model.getVersion() != null && model.getVersion().endsWith("-SNAPSHOT")) {
-                model.setVersion(artifact.getVersion());
+                model.setVersion(version);
             }
             new MavenXpp3Writer().write(writer, model);
             tmpFile.deleteOnExit();
