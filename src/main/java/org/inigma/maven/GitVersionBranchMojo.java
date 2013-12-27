@@ -1,27 +1,29 @@
 package org.inigma.maven;
 
+import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 
-import org.apache.maven.artifact.Artifact;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Dependency;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
+import org.codehaus.plexus.util.ReflectionUtils;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
+import org.sonatype.aether.repository.WorkspaceReader;
 
 /**
  * @author <a href="mailto:sejal@inigma.org">Sejal Patel</a>
  * @goal gitVersion
  * @phase validate
  */
-public class GitVersionBranchMojo extends AbstractMojo {
-    /**
-     * @parameter default-value="${project.artifact}"
-     */
-    private Artifact artifact;
+public class GitVersionBranchMojo extends AbstractVersionPomMojo {
     /**
      * The maven project.
      *
@@ -48,6 +50,12 @@ public class GitVersionBranchMojo extends AbstractMojo {
      * @readonly
      */
     private String versionPattern;
+    /**
+     * @parameter expression="${session}"
+     * @required
+     * @readonly
+     */
+    private MavenSession mavenSession;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
         boolean abortVersioning = false;
@@ -86,14 +94,43 @@ public class GitVersionBranchMojo extends AbstractMojo {
         }
 
         String finalVersion = version.getFinalVersion();
-        if (abortVersioning) {
+        if (abortVersioning || artifact.getVersion().equals(finalVersion)) {
             return;
         }
+
+        String originalVersion = artifact.getVersion();
+
         getLog().info("Altering versions to " + finalVersion);
         updateProjectInformation(project, finalVersion);
 
         for (MavenProject subproj : reactorProjects) {
             updateProjectInformation(subproj, finalVersion);
+        }
+
+        hackReactorReaderField("projectsByGAV", originalVersion, finalVersion);
+    }
+
+    private void hackReactorReaderField(String field, String originalVersion, String newVersion) {
+        WorkspaceReader reader = mavenSession.getRepositorySession().getWorkspaceReader();
+        try {
+            Field f = ReflectionUtils.getFieldByNameIncludingSuperclasses(field, Class.forName("org.apache.maven.ReactorReader"));
+            f.setAccessible(true);
+            Map<String, MavenProject> newprojects = new HashMap<String, MavenProject>();
+            Map<String, MavenProject> projects = (Map<String, MavenProject>) f.get(reader);
+            //getLog().debug("What is in " + field + ": " + projects);
+            for (Entry<String, MavenProject> entry : projects.entrySet()) {
+                MavenProject mavenProject = entry.getValue();
+                //getLog().debug("Source: " + mavenProject);
+                File hackPom = getPomFile(mavenProject.getFile());
+                mavenProject.setFile(hackPom);
+                //getLog().debug("New: " + mavenProject);
+                newprojects.put(entry.getKey().replaceAll(originalVersion, newVersion), mavenProject);
+            }
+            projects.clear();
+            projects.putAll(newprojects);
+            //getLog().debug("This is now: " + projects);
+        } catch (Exception e) {
+            getLog().error("Doh! Something broke!", e);
         }
     }
 

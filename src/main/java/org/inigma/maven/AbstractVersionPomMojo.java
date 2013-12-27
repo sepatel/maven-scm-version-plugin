@@ -58,16 +58,19 @@ public abstract class AbstractVersionPomMojo extends AbstractMojo {
      */
     protected ArtifactRepository localRepository;
 
-
     protected File getPomFile() {
+        return getPomFile(pomFile);
+    }
+
+    protected File getPomFile(File sourceFile) {
         Reader reader = null;
         Writer writer = null;
         Model model;
         try {
-            reader = ReaderFactory.newXmlReader(pomFile);
+            reader = ReaderFactory.newXmlReader(sourceFile);
             model = new MavenXpp3Reader().read(reader);
 
-            File tmpFile = File.createTempFile("mvninstall", ".pom");
+            File tmpFile = new File(sourceFile.getParent(), "version-branch.pom");
             writer = WriterFactory.newXmlWriter(tmpFile);
             Parent parent = model.getParent();
             if (parent != null && parent.getVersion().endsWith("-SNAPSHOT")) {
@@ -77,11 +80,12 @@ public abstract class AbstractVersionPomMojo extends AbstractMojo {
                 model.setVersion(artifact.getVersion());
             }
             new MavenXpp3Writer().write(writer, model);
+            tmpFile.deleteOnExit();
             return tmpFile;
         } catch (IOException e) {
-            getLog().error("Unable to read pom file " + pomFile, e);
+            getLog().error("Unable to read pom file " + sourceFile, e);
         } catch (XmlPullParserException e) {
-            getLog().error("Unable to understand pom file " + pomFile, e);
+            getLog().error("Unable to understand pom file " + sourceFile, e);
         } finally {
             if (reader != null) {
                 IOUtil.close(reader);
@@ -90,6 +94,6 @@ public abstract class AbstractVersionPomMojo extends AbstractMojo {
                 IOUtil.close(writer);
             }
         }
-        return pomFile;
+        return sourceFile;
     }
 }
