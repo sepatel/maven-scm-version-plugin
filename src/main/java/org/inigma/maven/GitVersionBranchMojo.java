@@ -94,11 +94,10 @@ public class GitVersionBranchMojo extends AbstractVersionPomMojo {
         }
 
         String finalVersion = version.getFinalVersion();
-        if (abortVersioning || artifact.getVersion().equals(finalVersion)) {
+        if (abortVersioning) {
             return;
         }
 
-        String originalVersion = artifact.getVersion();
 
         getLog().info("Altering versions to " + finalVersion);
         updateProjectInformation(project, finalVersion);
@@ -106,35 +105,45 @@ public class GitVersionBranchMojo extends AbstractVersionPomMojo {
         for (MavenProject subproj : reactorProjects) {
             updateProjectInformation(subproj, finalVersion);
         }
-
-        hackReactorReaderField("projectsByGAV", originalVersion, finalVersion);
     }
 
-    private void hackReactorReaderField(String field, String originalVersion, String newVersion) {
+    private void hackReactorReaderField(String field, String originalVersion, MavenProject prj) {
+        if (originalVersion.equals(prj.getVersion())) {
+            return;
+        }
         WorkspaceReader reader = mavenSession.getRepositorySession().getWorkspaceReader();
         try {
             Field f = ReflectionUtils.getFieldByNameIncludingSuperclasses(field, Class.forName("org.apache.maven.ReactorReader"));
             f.setAccessible(true);
             Map<String, MavenProject> newprojects = new HashMap<String, MavenProject>();
             Map<String, MavenProject> projects = (Map<String, MavenProject>) f.get(reader);
-            //getLog().debug("What is in " + field + ": " + projects);
+            getLog().debug("What is in " + field + ": " + projects);
             for (Entry<String, MavenProject> entry : projects.entrySet()) {
+                String key = entry.getKey();
                 MavenProject mavenProject = entry.getValue();
-                //getLog().debug("Source: " + mavenProject);
-                File hackPom = getPomFile(mavenProject.getFile());
-                mavenProject.setFile(hackPom);
-                //getLog().debug("New: " + mavenProject);
-                newprojects.put(entry.getKey().replaceAll(originalVersion, newVersion), mavenProject);
+                getLog().info("Does artifact or group match in " + key + ", " + prj.getArtifactId() + ", " + prj.getGroupId());
+                if (key.contains(prj.getGroupId())) {
+                    getLog().info("YES IT DOES!!!");
+                    getLog().debug("Source: " + mavenProject);
+                    File hackPom = getPomFile(mavenProject.getFile());
+                    mavenProject.setFile(hackPom);
+                    getLog().debug("New: " + mavenProject);
+                    getLog().debug("Swapping out version " + originalVersion + " with " + prj.getVersion());
+                    newprojects.put(key.replaceAll(originalVersion, prj.getVersion()), mavenProject);
+                } else {
+                    newprojects.put(key, mavenProject);
+                }
             }
             projects.clear();
             projects.putAll(newprojects);
-            //getLog().debug("This is now: " + projects);
+            getLog().debug("This is now: " + projects);
         } catch (Exception e) {
             getLog().error("Doh! Something broke!", e);
         }
     }
 
     private void updateProjectInformation(MavenProject prj, String finalVersion) {
+        String originalVersion = prj.getVersion();
         prj.getProperties().put("scmVersion", finalVersion); // branch-SNAPSHOT
         prj.setVersion(finalVersion);
         prj.getArtifact().setVersion(finalVersion);
@@ -145,5 +154,6 @@ public class GitVersionBranchMojo extends AbstractVersionPomMojo {
                 dependency.setVersion(finalVersion);
             }
         }
+        hackReactorReaderField("projectsByGAV", originalVersion, prj);
     }
 }
