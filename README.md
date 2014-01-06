@@ -36,7 +36,7 @@ is to put in the following snippet into the parent pom of the project.
          <plugin>
            <groupId>org.inigma.maven</groupId>
            <artifactId>maven-scm-version-plugin</artifactId>
-           <version>1.1</version>
+           <version>1.2</version>
            <executions>
              <execution>
                <goals>
